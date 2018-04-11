@@ -1,0 +1,8 @@
+[package]
+authors = ["Walther Chen <walther.chen@gmail.com>"]
+name = "llamas2"
+version = "0.1.0"
+
+[dependencies]
+failure = "0.1.1"
+rayon = "1.0.1"
