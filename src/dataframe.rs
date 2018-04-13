@@ -1,16 +1,21 @@
-use rayon::prelude::*;
 use failure::Error;
+use indexmap::IndexMap;
+use rayon::prelude::*;
 
 #[derive(Debug)]
 pub struct DataFrame {
     // Should this be a HashMap? IndexMap?
-    columns: Vec<Column>,
+    columns: IndexMap<String, Column>,
 }
 
 impl DataFrame {
-    pub fn add_col(&mut self, new_col: Column)
+    pub fn add_col(&mut self, name: String, new_col: Column)
     {
-        self.columns.push(new_col);
+        self.columns.insert(name, new_col);
+    }
+
+    pub fn get_col<'a>(&'a self, col_name: & str) -> Option<&'a Column> {
+        self.columns.get(col_name)
     }
 }
 
@@ -133,16 +138,16 @@ mod test {
     #[test]
     fn test_dataframe_basic() {
         let df = DataFrame {
-            columns: vec![
-                Column {
+            columns: indexmap!{
+                "id".to_owned() => Column {
                     name: "id".to_owned(),
                     data: Array::Int8(ArrayData(vec![1,2,3,4,5])),
                 },
-                Column {
+                "population".to_owned() => Column {
                     name: "population".to_owned(),
                     data: Array::Int8(ArrayData(vec![42,22,63,34,53])),
                 }
-            ]
+            }
         };
         println!("{:?}", df);
     }
@@ -150,23 +155,23 @@ mod test {
     #[test]
     fn test_dataframe_add_col() {
         let mut df = DataFrame {
-            columns: vec![
-                Column {
+            columns: indexmap!{
+                "id".to_owned() => Column {
                     name: "id".to_owned(),
                     data: Array::Int8(ArrayData(vec![1,2,3,4,5])),
                 },
-                Column {
+                "population".to_owned() => Column {
                     name: "population".to_owned(),
                     data: Array::Int8(ArrayData(vec![42,22,63,34,53])),
                 }
-            ]
+            }
         };
         println!("{:?}", df);
         let new_col = Column {
             name: "new_col".to_owned(),
-            data: df.columns[1].data.apply(|&x: &i8| x-2).unwrap(),
+            data: df.columns[&"population".to_owned()].data.apply(|&x: &i8| x-2).unwrap(),
         };
-        df.add_col(new_col);
+        df.add_col("new_col".to_owned(), new_col);
         println!("{:?}", df);
     }
 
