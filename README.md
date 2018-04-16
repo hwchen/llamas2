@@ -10,12 +10,15 @@ Implementation is going faster than before. My objective is to first
 implement my everday needs for data cleaning:
 
 - num and string arrays with nulls
-- assignment of an Array (Series in pandaland) to a Column
+- adding cols to df
 - melting and pivoting
 - splitting strings
 - reading/writing csv
 - sql table creation fn
-- df display
+
+Right now:
+- df display, finish melt
+- read csv (to make better tests)
 
 The best discovery so far is that in enums, trying to pass in the
 wrong type of fn for a map/apply will result in a compile-time error!
@@ -28,3 +31,10 @@ with traits, but this time with overloading traits:
 
 
 [link](https://www.reddit.com/r/rust/comments/7zrycu/so_function_overloading_is_part_of_stable_rust/)
+
+For blogpost, tricky spots:
+
+- getting the dynamic dispatch while also being able to access the primitive type for apply, get.
+- getting an iterator from col (similar issue to above)
+- melting, how to be able to set type of values col
+- melting, getting multiplier (have to create from previous col, in `pub(crate)` method)
