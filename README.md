@@ -18,7 +18,12 @@ implement my everday needs for data cleaning:
 
 Right now:
 - df display, finish melt
+- in `multiply_row`, first allocate the full vec since we know len and multiple.
+- in melt, create a fn returning Result internally to enable using `try?`.
+- create extend method for array?
 - read csv (to make better tests)
+
+- create Nullable enum?
 
 The best discovery so far is that in enums, trying to pass in the
 wrong type of fn for a map/apply will result in a compile-time error!

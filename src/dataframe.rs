@@ -42,39 +42,97 @@ macro_rules! melt {
     df=$old_df:ident,
     id_vars=[$($id_var:expr),+],
     value_vars=[$($value_var:expr),+],
-    value_type=$value_type:ty,
+    value_primitive_type=$value_primitive_type:ty,
+    value_type=$value_type:expr,
     var_name=$var_name:expr,
     value_name=$value_name:expr
     ) => {{
         let mut df = DataFrame::new();
 
-        // first determine how many times each of the id_vars will be multiplied
-        // by.
+        // Assert value_vars exist (id_vars can be asserted as they're
+        // actually used, but don't want to waste time with that if value_vars
+        // don't exist
+        //
+        // In conjunction, can count how many times each of the id_vars will
+        // be multiplied by.
         let id_vars_row_mult = {
             let mut count = 0;
             $(
-                let _ = $value_var;
+                $old_df.get_col($value_var).expect("value_var not found in columns");
                 count += 1;
             )+
             count
         };
 
         // new cols will be in order of id_vars, then var col, then value col
+        // also get max len of id_var, which will currently set the overall df len
+        // for now. TODO should I use an attribute df.len?
+        let mut df_len = 0;
         $(
             // create new col with each row multiplied
             // times id_vars_row_mult, and put in new Dataframe
             // TODO figure out the error handling here. Can't early
             // return from block.
-            let old_array = $old_df.get_col($id_var).expect("col not found");
+            let old_array = $old_df.get_col($id_var).expect("id_var not found in cols");
+            let array_len = old_array.len();
+            if array_len > df_len {
+                df_len = array_len;
+            }
 
             let new_array = old_array.multiply_row(id_vars_row_mult);
 
             df.add_col($id_var.to_string(), new_array);
         )+
 
+        // Now the value_vars col names get put into a col
+        // Since we previously asserted that they exist, can just make a vec
+        // that repeats in the iterator here
+        let mut value_vars = vec![];
+        $(
+            value_vars.push($value_var);
+        )+
+
+        let mut var_col = Array::new("Str").expect("couldn't create col");
+        // TODO create extend so don't have to use push
+        for _ in 0..df_len {
+            for v in &value_vars {
+                var_col.push(v.to_string());
+            }
+        }
+        df.add_col($var_name.to_string(), var_col);
+
+//        // now the values from the value_vars columns
+//        // Since there needs to be interleaving.
+//        // and I need to interleave an arbitrary number of
+//        // arrays, and I can't collect to tuple, I have to create
+//        // an array first and then
+//        let mut value_cols = vec![];
+//        $(
+//            // TODO meld this with check at the top of macro
+//            let old_value_col = $old_df.get_col($value_var).expect("value_var not found in columns");
+//            value_cols.push(old_value_col);
+//        )
+//
+//        let mut value_col = Array::new($value_type).expect("couldn't create col");
+//
+//        for i in interleave_cols(&value_cols) {
+//            value_col.push(values.i as $value_primitive_type)
+//        }
+//
+//        df.add_col($value_name.to_string(), value_col);
+
+        // Done
         df
     }}
 }
+
+//fn interleave_cols<T>(cols: Vec<&Array>) -> Vec<T> {
+//    // all col should be same length for now
+//
+//    let mut res = vec![0;];
+//    for col in cols {
+//    }
+//}
 
 pub trait DataType<T> {
     fn apply_inplace<F>(&mut self, f: F) -> Result<(), Error>
@@ -155,6 +213,23 @@ impl Array {
             Float32(ref array_data) => Float32(array_data.multiply_row(multiple)),
             Float64(ref array_data) => Float64(array_data.multiply_row(multiple)),
             Str(ref array_data) => Str(array_data.multiply_row(multiple)),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        use self::Array::*;
+        match *self {
+            Int8(ref array_data) => array_data.len(),
+            Int16(ref array_data) => array_data.len(),
+            Int32(ref array_data) => array_data.len(),
+            Int64(ref array_data) => array_data.len(),
+            UInt8(ref array_data) => array_data.len(),
+            UInt16(ref array_data) => array_data.len(),
+            UInt32(ref array_data) => array_data.len(),
+            UInt64(ref array_data) => array_data.len(),
+            Float32(ref array_data) => array_data.len(),
+            Float64(ref array_data) => array_data.len(),
+            Str(ref array_data) => array_data.len(),
         }
     }
 }
@@ -258,6 +333,10 @@ impl<T: Send + Sync + Clone> ArrayData<T> {
             }
         }
         ArrayData(res)
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 }
 
@@ -419,6 +498,7 @@ mod test {
         let mut df = DataFrame {
             columns: indexmap!{
                 "id".to_owned() => Array::Int8(ArrayData(vec![1,2,3,4,5])),
+                "id2".to_owned() => Array::Int8(ArrayData(vec![6,7,8,9,15])),
                 "A".to_owned() => Array::Int8(ArrayData(vec![42,22,63,34,53])),
                 "B".to_owned() => Array::Int8(ArrayData(vec![41,21,61,31,51])),
             }
@@ -426,9 +506,10 @@ mod test {
 
         let df = melt!(
             df=df,
-            id_vars=["id"],
+            id_vars=["id", "id2"],
             value_vars=["A", "B"],
-            value_type=usize,
+            value_primitive_type=u8,
+            value_type="UInt8",
             var_name="var",
             value_name="value"
             );
