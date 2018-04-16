@@ -141,7 +141,7 @@ impl Array {
         }
     }
 
-    fn multiply_row(&self, multiple: usize) -> Self {
+    pub(crate) fn multiply_row(&self, multiple: usize) -> Self {
         use self::Array::*;
         match *self {
             Int8(ref array_data) => Int8(array_data.multiply_row(multiple)),
