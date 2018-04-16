@@ -2,27 +2,78 @@ use failure::Error;
 use indexmap::IndexMap;
 use rayon::prelude::*;
 
-#[derive(Debug)]
+// TODO remove Array, just use DataFrame, Column, and Array (and in future Buffer
+// can replace Vec for lowest level)
+// Nulls are handled at the Column level (as high up as possible)
+
+#[derive(Debug, Clone)]
 pub struct DataFrame {
-    // Should this be a HashMap? IndexMap?
-    columns: IndexMap<String, Column>,
+    columns: IndexMap<String, Array>,
 }
 
 impl DataFrame {
-    pub fn add_col(&mut self, name: String, new_col: Column)
-    {
-        self.columns.insert(name, new_col);
+    pub fn new() -> Self {
+        DataFrame {
+            columns: IndexMap::new(),
+        }
     }
 
-    pub fn get_col<'a>(&'a self, col_name: & str) -> Option<&'a Column> {
+    pub fn add_col(&mut self, name: String, new_array: Array)
+    {
+        self.columns.insert(name, new_array);
+    }
+
+    pub fn get_col<'a>(&'a self, col_name: & str) -> Option<&'a Array> {
         self.columns.get(col_name)
     }
 }
 
-#[derive(Debug)]
-pub struct Column {
-    name: String,
-    data: Array,
+// Why am I using a macro? Because I want the type of the value col
+// to be specified, and that can only be done in a macro.
+//
+// var col is always string typed
+//
+// the id cols are going to be made from the original cols using a
+// pub(crate) method, so that the type will be known.
+//
+// I think that this covers the type trickery necessary for melt.
+macro_rules! melt {
+    (
+    df=$old_df:ident,
+    id_vars=[$($id_var:expr),+],
+    value_vars=[$($value_var:expr),+],
+    value_type=$value_type:ty,
+    var_name=$var_name:expr,
+    value_name=$value_name:expr
+    ) => {{
+        let mut df = DataFrame::new();
+
+        // first determine how many times each of the id_vars will be multiplied
+        // by.
+        let id_vars_row_mult = {
+            let mut count = 0;
+            $(
+                let _ = $value_var;
+                count += 1;
+            )+
+            count
+        };
+
+        // new cols will be in order of id_vars, then var col, then value col
+        $(
+            // create new col with each row multiplied
+            // times id_vars_row_mult, and put in new Dataframe
+            // TODO figure out the error handling here. Can't early
+            // return from block.
+            let old_array = $old_df.get_col($id_var).expect("col not found");
+
+            let new_array = old_array.multiply_row(id_vars_row_mult);
+
+            df.add_col($id_var.to_string(), new_array);
+        )+
+
+        df
+    }}
 }
 
 pub trait DataType<T> {
@@ -31,12 +82,16 @@ pub trait DataType<T> {
 
     fn apply<F>(&self, f: F) -> Result<Array, Error>
         where F: Fn(&T) -> T + Sync + Send;
+
+    fn get(&self, index: usize) -> Result<Option<Option<&T>>, Error>;
+
+    fn push(&mut self, item: T) -> Result<(), Error>;
 }
 
 /// This indirection allows for different generic types to
 /// be contained in one DataFrame. Alternatively, could
 /// be implemented using Traits instead of Enums.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Array {
     Int8(ArrayData<i8>),
     Int16(ArrayData<i16>),
@@ -52,6 +107,24 @@ pub enum Array {
 }
 
 impl Array {
+    pub fn new(dtype: &str) -> Result<Self, Error> {
+        match dtype {
+            "Int8" => Ok(Array::Int8(ArrayData(vec![]))),
+            "Int16" => Ok(Array::Int16(ArrayData(vec![]))),
+            "Int32" => Ok(Array::Int32(ArrayData(vec![]))),
+            "Int64" => Ok(Array::Int64(ArrayData(vec![]))),
+            "UInt8" => Ok(Array::UInt8(ArrayData(vec![]))),
+            "UInt16" => Ok(Array::UInt16(ArrayData(vec![]))),
+            "UInt32" => Ok(Array::UInt32(ArrayData(vec![]))),
+            "UInt64" => Ok(Array::UInt64(ArrayData(vec![]))),
+            "Float32" => Ok(Array::Float32(ArrayData(vec![]))),
+            "Float64" => Ok(Array::Float64(ArrayData(vec![]))),
+            "Str" => Ok(Array::Str(ArrayData(vec![]))),
+            _ => Err(format_err!("dtype {} not found", dtype)),
+        }
+
+    }
+
     pub fn dtype(&self) -> String {
         match *self {
             Array::Int8(_) => "Int8".to_owned(),
@@ -65,6 +138,23 @@ impl Array {
             Array::Float32(_) => "Float32".to_owned(),
             Array::Float64(_) => "Float64".to_owned(),
             Array::Str(_) => "Str".to_owned(),
+        }
+    }
+
+    fn multiply_row(&self, multiple: usize) -> Self {
+        use self::Array::*;
+        match *self {
+            Int8(ref array_data) => Int8(array_data.multiply_row(multiple)),
+            Int16(ref array_data) => Int16(array_data.multiply_row(multiple)),
+            Int32(ref array_data) => Int32(array_data.multiply_row(multiple)),
+            Int64(ref array_data) => Int64(array_data.multiply_row(multiple)),
+            UInt8(ref array_data) => UInt8(array_data.multiply_row(multiple)),
+            UInt16(ref array_data) => UInt16(array_data.multiply_row(multiple)),
+            UInt32(ref array_data) => UInt32(array_data.multiply_row(multiple)),
+            UInt64(ref array_data) => UInt64(array_data.multiply_row(multiple)),
+            Float32(ref array_data) => Float32(array_data.multiply_row(multiple)),
+            Float64(ref array_data) => Float64(array_data.multiply_row(multiple)),
+            Str(ref array_data) => Str(array_data.multiply_row(multiple)),
         }
     }
 }
@@ -94,6 +184,24 @@ macro_rules! impl_datatype_for_array {
                 }
             }
 
+            /// Result is for whether or not there's a runtime eror
+            /// First Option is whether a value existed at the requested index
+            /// Second Option is whether that value is null
+            fn get(&self, index: usize) -> Result<Option<Option<&$t>>, Error> {
+                // replace with inner instead of 0
+                // TODO there needs to be a match
+                match *self {
+                    $p(ref array_data) => Ok(array_data.get(index)),
+                    _ => Err(format_err!("type mismatch, array is {}", self.dtype())),
+                }
+            }
+
+            fn push(&mut self, item: $t) -> Result<(), Error> {
+                match *self {
+                    $p(ref mut array_data) => Ok(array_data.push(item)),
+                    _ => Err(format_err!("type mismatch, array is {}", self.dtype())),
+                }
+            }
         }
     };
 }
@@ -110,10 +218,11 @@ impl_datatype_for_array!(f32, Array::Float32);
 impl_datatype_for_array!(f64, Array::Float64);
 impl_datatype_for_array!(String, Array::Str);
 
-#[derive(Debug)]
+
+#[derive(Debug, Clone)]
 pub struct ArrayData<T>(Vec<T>);
 
-impl<T: Send + Sync> ArrayData<T> {
+impl<T: Send + Sync + Clone> ArrayData<T> {
     pub fn apply_inplace<F>(&mut self, f: F)
         where F: Fn(&mut T) + Sync + Send
     {
@@ -129,7 +238,91 @@ impl<T: Send + Sync> ArrayData<T> {
                 .collect::<Vec<_>>()
         )
     }
+
+    // Inner option signifies null
+    pub fn get(&self, index: usize) -> Option<Option<&T>> {
+        // TODO for now it's wrapped in Some to signifiy
+        // that it's always non-null
+        self.0.get(index).map(|x| Some(x))
+    }
+
+    pub fn push(&mut self, item: T) {
+        self.0.push(item);
+    }
+
+    pub(crate) fn multiply_row(&self, multiple: usize) -> Self {
+        let mut res = Vec::new();
+        for row in &self.0 {
+            for _ in 0..multiple {
+                res.push(row.clone());
+            }
+        }
+        ArrayData(res)
+    }
 }
+
+// Iterator stuff here
+
+/// Iterator for column types.
+pub struct ArrayIterator<'a, T: 'a> {
+    values: &'a ArrayData<T>,
+    index: usize,
+}
+
+impl<'a, T> ArrayIterator<'a, T>
+{
+    pub fn new(values: &'a ArrayData<T>) -> Self {
+        ArrayIterator {
+            values: values,
+            index: 0,
+        }
+    }
+}
+
+impl<'a, T: 'a + Clone> Iterator for ArrayIterator<'a, T>
+    where T: Send + Sync
+{
+    type Item = Option<&'a T>;
+
+    // Outer option is normal iterator Option:
+    // whether or not a value exists.
+    // The inner Option is to signify a Null
+    fn next(&mut self) -> Option<Option<&'a T>> {
+        let res = self.values.get(self.index);
+        self.index += 1;
+        res
+    }
+}
+
+pub trait DataTypeIterator<'a, T> {
+    fn values(self) -> Result<ArrayIterator<'a, T>, Error>;
+}
+
+macro_rules! impl_datatype_iter_for_array {
+    ($t:ty, $p: path) => {
+        impl<'a> DataTypeIterator<'a, $t> for &'a Array {
+            fn values(self) -> Result<ArrayIterator<'a, $t>, Error> {
+                match self {
+                    $p(ref array_data) => Ok(ArrayIterator::new(array_data)),
+                    _ => Err(format_err!("type mismatch, array is {}", self.dtype())),
+                }
+            }
+        }
+    };
+}
+
+
+impl_datatype_iter_for_array!(i8, Array::Int8);
+impl_datatype_iter_for_array!(i16, Array::Int16);
+impl_datatype_iter_for_array!(i32, Array::Int32);
+impl_datatype_iter_for_array!(i64, Array::Int64);
+impl_datatype_iter_for_array!(u8, Array::UInt8);
+impl_datatype_iter_for_array!(u16, Array::UInt16);
+impl_datatype_iter_for_array!(u32, Array::UInt32);
+impl_datatype_iter_for_array!(u64, Array::UInt64);
+impl_datatype_iter_for_array!(f32, Array::Float32);
+impl_datatype_iter_for_array!(f64, Array::Float64);
+impl_datatype_iter_for_array!(String, Array::Str);
 
 #[cfg(test)]
 mod test {
@@ -139,14 +332,8 @@ mod test {
     fn test_dataframe_basic() {
         let df = DataFrame {
             columns: indexmap!{
-                "id".to_owned() => Column {
-                    name: "id".to_owned(),
-                    data: Array::Int8(ArrayData(vec![1,2,3,4,5])),
-                },
-                "population".to_owned() => Column {
-                    name: "population".to_owned(),
-                    data: Array::Int8(ArrayData(vec![42,22,63,34,53])),
-                }
+                "id".to_owned() => Array::Int8(ArrayData(vec![1,2,3,4,5])),
+                "population".to_owned() => Array::Int8(ArrayData(vec![42,22,63,34,53])),
             }
         };
         println!("{:?}", df);
@@ -156,21 +343,13 @@ mod test {
     fn test_dataframe_add_col() {
         let mut df = DataFrame {
             columns: indexmap!{
-                "id".to_owned() => Column {
-                    name: "id".to_owned(),
-                    data: Array::Int8(ArrayData(vec![1,2,3,4,5])),
-                },
-                "population".to_owned() => Column {
-                    name: "population".to_owned(),
-                    data: Array::Int8(ArrayData(vec![42,22,63,34,53])),
-                }
+                "id".to_owned() => Array::Int8(ArrayData(vec![1,2,3,4,5])),
+                "population".to_owned() => Array::Int8(ArrayData(vec![42,22,63,34,53])),
             }
         };
         println!("{:?}", df);
-        let new_col = Column {
-            name: "new_col".to_owned(),
-            data: df.columns[&"population".to_owned()].data.apply(|&x: &i8| x-2).unwrap(),
-        };
+        let new_col = df.columns[&"population".to_owned()].apply(|&x: &i8| x-2).unwrap();
+
         df.add_col("new_col".to_owned(), new_col);
         println!("{:?}", df);
     }
@@ -235,4 +414,25 @@ mod test {
         array.apply(test_fn_bad2).unwrap();
     }
 
+    #[test]
+    fn test_melt() {
+        let mut df = DataFrame {
+            columns: indexmap!{
+                "id".to_owned() => Array::Int8(ArrayData(vec![1,2,3,4,5])),
+                "A".to_owned() => Array::Int8(ArrayData(vec![42,22,63,34,53])),
+                "B".to_owned() => Array::Int8(ArrayData(vec![41,21,61,31,51])),
+            }
+        };
+
+        let df = melt!(
+            df=df,
+            id_vars=["id"],
+            value_vars=["A", "B"],
+            value_type=usize,
+            var_name="var",
+            value_name="value"
+            );
+        println!("{:?}", df);
+        panic!();
+    }
 }

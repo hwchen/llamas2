@@ -15,6 +15,7 @@ implement my everday needs for data cleaning:
 - splitting strings
 - reading/writing csv
 - sql table creation fn
+- df display
 
 The best discovery so far is that in enums, trying to pass in the
 wrong type of fn for a map/apply will result in a compile-time error!
