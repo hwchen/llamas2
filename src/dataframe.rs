@@ -101,38 +101,35 @@ macro_rules! melt {
         }
         df.add_col($var_name.to_string(), var_col);
 
-//        // now the values from the value_vars columns
-//        // Since there needs to be interleaving.
-//        // and I need to interleave an arbitrary number of
-//        // arrays, and I can't collect to tuple, I have to create
-//        // an array first and then
-//        let mut value_cols = vec![];
-//        $(
-//            // TODO meld this with check at the top of macro
-//            let old_value_col = $old_df.get_col($value_var).expect("value_var not found in columns");
-//            value_cols.push(old_value_col);
-//        )
-//
-//        let mut value_col = Array::new($value_type).expect("couldn't create col");
-//
-//        for i in interleave_cols(&value_cols) {
-//            value_col.push(values.i as $value_primitive_type)
-//        }
-//
-//        df.add_col($value_name.to_string(), value_col);
+        // now the values from the value_vars columns
+        // Since there needs to be interleaving.
+        // and I need to interleave an arbitrary number of
+        // arrays, and I can't collect to tuple, I have to create
+        // an array first and then
+        let mut value_cols = vec![];
+        $(
+            // TODO meld this with check at the top of macro
+            let old_value_col = $old_df.get_col($value_var).expect("value_var not found in columns");
+            value_cols.push(old_value_col);
+        )+
+
+        let mut value_col = Array::new($value_type).expect("couldn't create col");
+
+
+        for i in 0..df_len {
+            for col in &value_cols {
+//                value_col.push(
+//                    col_get!(col, col.primitive_dtype()) as $value_primitive_type
+//                );
+            }
+        }
+
+        df.add_col($value_name.to_string(), value_col);
 
         // Done
         df
     }}
 }
-
-//fn interleave_cols<T>(cols: Vec<&Array>) -> Vec<T> {
-//    // all col should be same length for now
-//
-//    let mut res = vec![0;];
-//    for col in cols {
-//    }
-//}
 
 pub trait DataType<T> {
     fn apply_inplace<F>(&mut self, f: F) -> Result<(), Error>
@@ -196,6 +193,22 @@ impl Array {
             Array::Float32(_) => "Float32".to_owned(),
             Array::Float64(_) => "Float64".to_owned(),
             Array::Str(_) => "Str".to_owned(),
+        }
+    }
+
+    pub fn primitive_dtype(&self) -> String {
+        match *self {
+            Array::Int8(_) => "i8".to_owned(),
+            Array::Int16(_) => "i16".to_owned(),
+            Array::Int32(_) => "i32".to_owned(),
+            Array::Int64(_) => "i64".to_owned(),
+            Array::UInt8(_) => "u8".to_owned(),
+            Array::UInt16(_) => "u16".to_owned(),
+            Array::UInt32(_) => "u32".to_owned(),
+            Array::UInt64(_) => "u64".to_owned(),
+            Array::Float32(_) => "f32".to_owned(),
+            Array::Float64(_) => "f64".to_owned(),
+            Array::Str(_) => "String".to_owned(),
         }
     }
 
