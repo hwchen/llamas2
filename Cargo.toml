@@ -6,4 +6,5 @@ version = "0.1.0"
 [dependencies]
 failure = "0.1.1"
 indexmap = "1.0.1"
+llamas2-macros = {path = "llamas2-macros"}
 rayon = "1.0.1"

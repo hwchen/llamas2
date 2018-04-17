@@ -1,0 +1,13 @@
+[package]
+authors = ["Walther Chen <walther.chen@gmail.com>"]
+name = "llamas2-macros"
+version = "0.1.0"
+
+[dependencies]
+quote = "0.5.1"
+[dependencies.syn]
+version = "0.13.1"
+features = ["full"]
+
+[lib]
+proc-macro = true

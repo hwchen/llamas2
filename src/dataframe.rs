@@ -1,5 +1,6 @@
 use failure::Error;
 use indexmap::IndexMap;
+use llamas2_macros::col_get;
 use rayon::prelude::*;
 
 // TODO remove Array, just use DataFrame, Column, and Array (and in future Buffer
@@ -416,6 +417,11 @@ impl_datatype_iter_for_array!(f32, Array::Float32);
 impl_datatype_iter_for_array!(f64, Array::Float64);
 impl_datatype_iter_for_array!(String, Array::Str);
 
+pub fn test_macro_col_get() {
+    let col_test = Array::new("i32").unwrap();
+    col_get!(col_test, 1, i32);
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -527,6 +533,12 @@ mod test {
             value_name="value"
             );
         println!("{:?}", df);
+        panic!();
+    }
+
+    #[test]
+    fn test_col_get_macro() {
+        test_macro_col_get();
         panic!();
     }
 }
