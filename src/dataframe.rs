@@ -41,7 +41,7 @@ macro_rules! melt {
     (
     df=$old_df:ident,
     id_vars=[$($id_var:expr),+],
-    value_vars=[$($value_var:expr),+],
+    value_vars=[$(($value_var:expr, $value_var_type:ty)),+],
     value_primitive_type=$value_primitive_type:ty,
     value_type=$value_type:expr,
     var_name=$var_name:expr,
@@ -102,26 +102,19 @@ macro_rules! melt {
         df.add_col($var_name.to_string(), var_col);
 
         // now the values from the value_vars columns
-        // Since there needs to be interleaving.
-        // and I need to interleave an arbitrary number of
-        // arrays, and I can't collect to tuple, I have to create
-        // an array first and then
-        let mut value_cols = vec![];
-        $(
-            // TODO meld this with check at the top of macro
-            let old_value_col = $old_df.get_col($value_var).expect("value_var not found in columns");
-            value_cols.push(old_value_col);
-        )+
-
         let mut value_col = Array::new($value_type).expect("couldn't create col");
 
-
         for i in 0..df_len {
-            for col in &value_cols {
-//                value_col.push(
-//                    col_get!(col, col.primitive_dtype()) as $value_primitive_type
-//                );
-            }
+            $(
+                let col = $old_df.get_col($value_var).expect("value_var not found in columns");
+                let v: Result<Option<Option<&$value_var_type>>, Error> = col.get(i);
+                let v = v
+                    .expect("Wrong type")
+                    .expect(format!("Could not find index {} in col", i).as_str())
+                    .unwrap() // this second unwrap is because no nulls impl yet
+                    .clone();
+                value_col.push(v as $value_primitive_type);
+            )+
         }
 
         df.add_col($value_name.to_string(), value_col);
@@ -130,6 +123,7 @@ macro_rules! melt {
         df
     }}
 }
+
 
 pub trait DataType<T> {
     fn apply_inplace<F>(&mut self, f: F) -> Result<(), Error>
@@ -507,7 +501,7 @@ mod test {
     }
 
     #[test]
-    fn test_melt() {
+    fn test_melt_basic() {
         let mut df = DataFrame {
             columns: indexmap!{
                 "id".to_owned() => Array::Int8(ArrayData(vec![1,2,3,4,5])),
@@ -520,13 +514,22 @@ mod test {
         let df = melt!(
             df=df,
             id_vars=["id", "id2"],
-            value_vars=["A", "B"],
+            value_vars=[("A", i8), ("B", i8)],
             value_primitive_type=u8,
             value_type="UInt8",
             var_name="var",
             value_name="value"
             );
         println!("{:?}", df);
+        panic!();
+    }
+
+    #[test]
+    fn test_get() {
+        let array = Array::Int8(ArrayData(vec![1,2,3]));
+        println!("{:?}", array);
+        let x: Result<Option<Option<&i8>>, Error> = array.get(0);
+        println!("{:?}", x);
         panic!();
     }
 }
