@@ -4,7 +4,7 @@ extern crate failure;
 extern crate indexmap;
 extern crate rayon;
 
-mod dataframe;
+pub mod dataframe;
 
 #[cfg(test)]
 mod tests {

@@ -8,7 +8,7 @@ use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
 pub struct DataFrame {
-    columns: IndexMap<String, Array>,
+    pub columns: IndexMap<String, Array>,
 }
 
 impl DataFrame {
@@ -37,6 +37,7 @@ impl DataFrame {
 // pub(crate) method, so that the type will be known.
 //
 // I think that this covers the type trickery necessary for melt.
+#[macro_export]
 macro_rules! melt {
     (
     df=$old_df:ident,
@@ -206,7 +207,7 @@ impl Array {
         }
     }
 
-    pub(crate) fn multiply_row(&self, multiple: usize) -> Self {
+    pub fn multiply_row(&self, multiple: usize) -> Self {
         use self::Array::*;
         match *self {
             Int8(ref array_data) => Int8(array_data.multiply_row(multiple)),
@@ -305,6 +306,10 @@ impl_datatype_for_array!(String, Array::Str);
 pub struct ArrayData<T>(Vec<T>);
 
 impl<T: Send + Sync + Clone> ArrayData<T> {
+    pub fn from_vec(xs: Vec<T>) -> Self {
+        ArrayData(xs)
+    }
+
     pub fn apply_inplace<F>(&mut self, f: F)
         where F: Fn(&mut T) + Sync + Send
     {
@@ -332,7 +337,7 @@ impl<T: Send + Sync + Clone> ArrayData<T> {
         self.0.push(item);
     }
 
-    pub(crate) fn multiply_row(&self, multiple: usize) -> Self {
+    pub fn multiply_row(&self, multiple: usize) -> Self {
         let mut res = Vec::new();
         for row in &self.0 {
             for _ in 0..multiple {
