@@ -1,4 +1,32 @@
-# llamas 2
+# llamas2
+
+## Installation
+
+llamas2 is written for the Rust ecosystem.
+
+- You will need to install Rust. [Rustup](https://rustup.rs) is suggested.
+- Currently runs on stable, but may shift to using procedural macros which are unsafe and require nightly.
+- This crate is unpublished. To use as a dependency, in `Cargo.toml`:
+
+```toml
+[dependencies]
+llamas2 = { git = "https://github.com/hwchen/llamas2" }
+```
+
+## Use
+
+Please see [examples](https://github.com/hwchen/llamas2/examples).
+
+## Implemented
+
+- heterogenous datatypes in a table
+- basic adding new cols to table
+- `apply` method, to apply a fn to a column
+- `melt` macro
+
+I'm currently implementing only what I need for a proof of concept (see Motivation section below).
+
+Most important at this stage is to make sure that type and macro system is flexible enough to implement dynamic and flexible dataframes while also tying into performant data structures (without too much pain).
 
 ## Motivation
 
