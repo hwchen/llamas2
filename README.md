@@ -24,7 +24,7 @@ Please see [examples](https://github.com/hwchen/llamas2/examples).
 - `apply` method, to apply a fn to a column
 - `melt` macro
 
-I'm currently implementing only what I need for a proof of concept (see Motivation section below).
+I'm currently implementing only what I need for a proof of concept (see [Motivation](#Motivation) section below).
 
 Most important at this stage is to make sure that type and macro system is flexible enough to implement dynamic and flexible dataframes while also tying into performant data structures (without too much pain).
 
